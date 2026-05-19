@@ -1073,154 +1073,6 @@ jobs:
       - name: Generate Prisma client
         run: |
           cd backend
-          npx prisma generate
-
-      - name: Run database migrations
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
-        run: |
-          cd backend
-          npx prisma migrate deploy
-
-      - name: Seed test data
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
-          JWT_SECRET: ci-test-secret-key
-          NODE_ENV: test
-        run: |
-          cd backend
-          # รัน seed script ถ้ามี (สร้าง admin user สำหรับ test)
-          node -e "
-            const { PrismaClient } = require('@prisma/client');
-            const bcrypt = require('bcryptjs');
-            const prisma = new PrismaClient();
-            async function seed() {
-              const hash = await bcrypt.hash('admin123', 10);
-              await prisma.user.upsert({
-                where: { username: 'admin' },
-                update: {},
-                create: { username: 'admin', password: hash, role: 'admin' }
-              });
-              await prisma.room.create({
-                data: { name: 'Test Room 101', type: 'Standard', capacity: 2, price: 1000 }
-              });
-              console.log('Seed completed');
-            }
-            seed().catch(console.error).finally(() => prisma.\$disconnect());
-          "
-
-      - name: Start backend server
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
-          JWT_SECRET: ci-test-secret-key
-          PORT: 3001
-          NODE_ENV: test
-        run: |
-          cd backend
-          npm start &
-          # รอให้ server พร้อม
-          sleep 5
-          curl -f http://localhost:3001/api/rooms || (echo "Server not ready" && exit 1)
-
-      - name: Install Newman
-        run: npm install -g newman newman-reporter-htmlextra
-
-      - name: Run Newman API Tests
-        run: |
-          newman run tests/booking-api.postman_collection.json \
-            --env-var "baseUrl=http://localhost:3001" \
-            --reporters cli,junit \
-            --reporter-junit-export newman-results.xml
-
-      - name: Upload Newman test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: newman-test-results
-          path: newman-results.xml
-
-  # ─────────────────────────────────────────────
-  # Job 2: Frontend CI — Install, Build, Lint
-  # ─────────────────────────────────────────────
-  frontend-build:
-    name: Frontend Build & Lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-
-      - name: Build frontend
-        env:
-          VITE_API_URL: http://localhost:3001
-        run: |
-          cd frontend
-          npm run build
-name: CI/CD Pipeline — Booking App
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  NODE_VERSION: '20'
-
-jobs:
-  # ─────────────────────────────────────────────
-  # Job 1: Backend CI — Install, Migrate, Test
-  # ─────────────────────────────────────────────
-  backend-test:
-    name: Backend Tests (Newman API)
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: booking_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          npm ci
-
-      - name: Generate Prisma client
-        run: |
-          cd backend
           npx prisma generate --schema=prisma/schema.prisma
 
       - name: Run database migrations
@@ -1237,7 +1089,6 @@ jobs:
           NODE_ENV: test
         run: |
           cd backend
-          # รัน seed script ถ้ามี (สร้าง admin user สำหรับ test)
           node -e "
             const { PrismaClient } = require('@prisma/client');
             const bcrypt = require('bcryptjs');
@@ -1266,7 +1117,6 @@ jobs:
         run: |
           cd backend
           npm start &
-          # รอให้ server พร้อม
           sleep 5
           curl -f http://localhost:3001/api/rooms || (echo "Server not ready" && exit 1)
 
@@ -1325,7 +1175,6 @@ jobs:
 
   # ─────────────────────────────────────────────
   # Job 3: Deploy Frontend to Vercel
-  # (เฉพาะเมื่อ push ไปที่ main เท่านั้น)
   # ─────────────────────────────────────────────
   deploy-frontend:
     name: Deploy Frontend → Vercel
@@ -1351,7 +1200,6 @@ jobs:
 
   # ─────────────────────────────────────────────
   # Job 4: Deploy Backend to Render
-  # (เฉพาะเมื่อ push ไปที่ main เท่านั้น)
   # ─────────────────────────────────────────────
   deploy-backend-render:
     name: Deploy Backend → Render
